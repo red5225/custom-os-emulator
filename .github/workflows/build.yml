@@ -1,0 +1,61 @@
+name: Build Custom OS Emulator
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-13
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download v86 runtime
+        run: |
+          set -eux
+          mkdir -p app/resources
+          npm pack v86@latest
+          TARBALL=$(ls v86-*.tgz | head -n 1)
+          mkdir -p /tmp/v86pkg
+          tar -xzf "$TARBALL" -C /tmp/v86pkg
+          cp /tmp/v86pkg/package/build/libv86.js app/resources/libv86.js
+          cp /tmp/v86pkg/package/build/v86.wasm app/resources/v86.wasm
+          curl -L --fail -o app/resources/seabios.bin https://raw.githubusercontent.com/copy/v86/master/bios/seabios.bin
+          curl -L --fail -o app/resources/vgabios.bin https://raw.githubusercontent.com/copy/v86/master/bios/vgabios.bin
+          ls -lh app/resources
+
+      - name: Build macOS Intel app
+        run: |
+          set -eux
+          mkdir -p build/CustomOSEmulator.app/Contents/MacOS
+          mkdir -p build/CustomOSEmulator.app/Contents/Resources
+
+          clang -framework Cocoa -framework WebKit             -mmacosx-version-min=10.15             app/main.m app/AppDelegate.m             -o build/CustomOSEmulator.app/Contents/MacOS/CustomOSEmulator
+
+          cp app/Info.plist build/CustomOSEmulator.app/Contents/Info.plist
+          cp app/index.html build/CustomOSEmulator.app/Contents/Resources/index.html
+          cp app/resources/* build/CustomOSEmulator.app/Contents/Resources/
+
+          file build/CustomOSEmulator.app/Contents/MacOS/CustomOSEmulator
+
+      - name: Package
+        run: |
+          set -eux
+          ditto -c -k --sequesterRsrc --keepParent             build/CustomOSEmulator.app             build/custom-os-emulator-macos-intel.zip
+
+      - name: Upload macOS Intel app
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-os-emulator-macos-intel
+          path: build/custom-os-emulator-macos-intel.zip
+          if-no-files-found: error
+          retention-days: 30

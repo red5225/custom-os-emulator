@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Custom OS Emulator</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#111;color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;overflow:hidden}
+.top{height:58px;background:rgba(35,35,38,.96);display:flex;align-items:center;padding:0 18px;border-bottom:1px solid #444;gap:10px}
+.dot{width:13px;height:13px;border-radius:50%}
+.red{background:#ff5f57}.yellow{background:#febc2e}.green{background:#28c840}
+.title{margin-left:10px;font-weight:600;font-size:15px}
+.spacer{flex:1}
+.status{font-size:12px;color:#aaa}
+.main{height:calc(100vh - 58px);display:flex;flex-direction:column;align-items:center;padding:26px}
+.card{width:min(1000px,95vw);background:#1d1d20;border:1px solid #3b3b40;border-radius:22px;padding:22px;box-shadow:0 20px 70px #0008}
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px}
+button,.fileLabel{border:0;border-radius:11px;background:#303035;color:#fff;padding:10px 15px;font-size:13px;cursor:pointer}
+button:hover,.fileLabel:hover{background:#414148}
+.primary{background:#147ef5}
+.primary:hover{background:#3191ff}
+input[type=file]{display:none}
+.screenWrap{background:#000;border-radius:14px;padding:10px;min-height:430px;display:flex;align-items:center;justify-content:center;border:1px solid #444}
+#screen_container{background:#000;max-width:100%;overflow:hidden}
+#screen_container>div{white-space:pre;font:14px monospace;line-height:14px}
+#screen_container canvas{max-width:100%;height:auto}
+.drop{margin-top:14px;color:#999;font-size:12px;text-align:center}
+.footer{margin-top:12px;color:#777;font-size:11px;text-align:center}
+</style>
+<script src="libv86.js"></script>
+</head>
+<body>
+<div class="top">
+ <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+ <div class="title">Custom OS Emulator</div>
+ <div class="spacer"></div><div class="status" id="status">Ready</div>
+</div>
+<div class="main">
+ <div class="card">
+  <div class="toolbar">
+   <label class="fileLabel primary">Open ISO<input id="iso" type="file" accept=".iso,application/octet-stream"></label>
+   <button id="start">Start</button>
+   <button id="pause">Pause</button>
+   <button id="reset">Reset</button>
+   <button id="eject">Eject</button>
+  </div>
+  <div class="screenWrap"><div id="screen_container">
+   <div></div><canvas style="display:none"></canvas>
+  </div></div>
+  <div class="drop">Choose an ISO, then press Start. Your ISO stays local to this Mac.</div>
+  <div class="footer">x86 PC emulation • BIOS • VGA • CD-ROM • PS/2 keyboard</div>
+ </div>
+</div>
+<script>
+let emulator=null, isoBuffer=null;
+
+const statusEl=document.getElementById("status");
+function status(s){statusEl.textContent=s}
+
+document.getElementById("iso").addEventListener("change", async e=>{
+ const f=e.target.files[0]; if(!f)return;
+ isoBuffer=await f.arrayBuffer();
+ status(f.name+" loaded");
+});
+
+document.getElementById("start").onclick=()=>{
+ if(!isoBuffer){status("Choose an ISO first");return}
+ if(emulator){emulator.run();status("Running");return}
+ status("Starting…");
+ emulator=new V86({
+   wasm_path:"v86.wasm",
+   memory_size:64*1024*1024,
+   vga_memory_size:8*1024*1024,
+   screen_container:document.getElementById("screen_container"),
+   bios:{url:"seabios.bin"},
+   vga_bios:{url:"vgabios.bin"},
+   cdrom:{buffer:isoBuffer},
+   autostart:true,
+   disable_speaker:true
+ });
+ status("Running");
+};
+
+document.getElementById("pause").onclick=()=>{
+ if(emulator){emulator.stop();status("Paused")}
+};
+
+document.getElementById("reset").onclick=()=>{
+ if(emulator){emulator.stop();emulator.destroy();emulator=null}
+ document.querySelector("#screen_container>div").textContent="";
+ status("Reset");
+};
+
+document.getElementById("eject").onclick=()=>{
+ if(emulator){emulator.eject_cdrom();status("CD ejected")}
+};
+
+window.addEventListener("dragover",e=>e.preventDefault());
+window.addEventListener("drop",async e=>{
+ e.preventDefault();
+ const f=e.dataTransfer.files[0];
+ if(!f)return;
+ isoBuffer=await f.arrayBuffer();
+ status(f.name+" loaded");
+});
+</script>
+</body>
+</html>
